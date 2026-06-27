@@ -1,0 +1,15 @@
+{
+  "name": "secbook-examples",
+  "version": "1.0.0",
+  "description": "Code examples for Applied Software Security",
+  "scripts": {
+    "start": "node part3/chapter-3-1/base-project/app.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "express": "^4.18.2",
+    "express-session": "^1.17.3",
+    "pg": "^8.11.3",
+    "zod": "^3.22.4"
+  }
+}
