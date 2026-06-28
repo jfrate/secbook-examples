@@ -1,12 +1,18 @@
-// app.js - minimal demo with simple auth and RBAC (no CSS)
-// Dependencies: express, express-session, bcryptjs
-// Install: npm install express express-session bcryptjs
+// app.js - XPath injection demonstration
+// Dependencies: express, express-session, xpath, xmldom
+// Install: npm install express express-session xpath xmldom
 
 const express = require('express');
 const session = require('express-session');
-const bcrypt = require('bcryptjs');
+const xpath = require('xpath');
+const { DOMParser } = require('xmldom');
+const fs = require('fs');
 
 const app = express();
+
+// ---------- Load XML user store ----------
+const xmlData = fs.readFileSync('./users.xml', 'utf8');
+const doc = new DOMParser().parseFromString(xmlData);
 
 // ---------- Basic middleware ----------
 app.use(express.urlencoded({ extended: false }));
@@ -26,18 +32,6 @@ app.use(
       maxAge: 1000 * 60 * 60 // 1 hour
     }
   })
-);
-
-// ---------- In-memory users (demo only) ----------
-const seedUsers = [
-  { username: 'alice', password: 'password1', role: 'admin' },
-  { username: 'bob',   password: 'password2', role: 'user'  }
-];
-const USERS = Object.fromEntries(
-  seedUsers.map(u => [
-    u.username,
-    { username: u.username, role: u.role, passwordHash: bcrypt.hashSync(u.password, 10) }
-  ])
 );
 
 // ---------- Helpers ----------
@@ -86,20 +80,29 @@ const page = (title, body, user) => `
 // ---------- Routes ----------
 app.get('/', (req, res) => {
   const user = req.session.user;
-  res.send(page('Home', `
-    <h1>Base Application</h1>
-    <p>This web application implements simple username/password login and role-based access control, and is used as a base project to demonstrate various security topics.</p>
-    <p>Try logging in with:</p>
+  res.send(page('XPath Injection', `
+    <h1>XPath Injection</h1>
+    <p>XPath injection is an attack technique where user-supplied input is embedded into an XPath query without sanitization, allowing an attacker to manipulate the query's logic. XPath is used to navigate and query XML documents, and like SQL injection, unsanitized input can cause unintended data to be returned or authentication to be bypassed entirely.</p>
+
+    <h2>How This App Works</h2>
+    <p>User credentials are stored in <code>users.xml</code>. On login, the app builds this XPath query using the submitted username and password:</p>
+    <pre>//users/user[username/text()='<em>USERNAME</em>' and password/text()='<em>PASSWORD</em>']</pre>
+    <p>If the query returns a node, the user is logged in as that user.</p>
+
+    <h2>The Attack</h2>
+    <p>Enter the following as the username (any password):</p>
+    <pre>' or '1'='1' or 'a'='b</pre>
+    <p>This transforms the query into:</p>
+    <pre>//users/user[username/text()='' or '1'='1' or 'a'='b' and password/text()='anything']</pre>
+    <p>XPath evaluates <code>and</code> before <code>or</code>, so the three <code>or</code> terms are: <code>username=''</code> (false), <code>'1'='1'</code> (always true), and <code>'a'='b' and password='anything'</code> (false). The second term short-circuits the whole predicate to true, so the query returns the first user in the XML document — granting login as <strong>alice (admin)</strong> with no valid credentials.</p>
+
+    <h2>Try It</h2>
     <ul>
-      <li><code>alice / password1</code> (role: admin)</li>
-      <li><code>bob / password2</code> (role: user)</li>
+      <li>Normal login: <code>alice / password1</code> (admin) or <code>bob / password2</code> (user)</li>
+      <li>Injection bypass: username <code>' or '1'='1' or 'a'='b</code>, any password</li>
     </ul>
-    <p>Protected pages:</p>
-    <ul>
-      <li><a href="/dashboard">/dashboard</a> (requires login)</li>
-      <li><a href="/admin">/admin</a> (requires admin role)</li>
-      <li><a href="/api/me">/api/me</a> (JSON; requires login)</li>
-    </ul>
+    <p><a href="/login">Go to login</a></p>
+
     ${user ? `<p>Currently logged in as <strong>${user.username}</strong> (${user.role}).</p>` : '<p>You are not logged in.</p>'}
   `, user));
 });
@@ -121,15 +124,19 @@ app.get('/login', (req, res) => {
 
 app.post('/login', (req, res) => {
   const { username, password } = req.body || {};
-  const record = USERS[username];
-  if (!record) {
+
+  // VULNERABLE: user input concatenated directly into XPath query
+  const expr = `//users/user[username/text()='${username}' and password/text()='${password}']`;
+  const nodes = xpath.select(expr, doc);
+
+  if (!nodes || nodes.length === 0) {
     return res.status(401).send(page('Login failed', '<p>Invalid credentials.</p><p><a href="/login">Try again</a></p>'));
   }
-  const ok = bcrypt.compareSync(password, record.passwordHash);
-  if (!ok) {
-    return res.status(401).send(page('Login failed', '<p>Invalid credentials.</p><p><a href="/login">Try again</a></p>'));
-  }
-  req.session.user = { username: record.username, role: record.role };
+
+  const node = nodes[0];
+  const uname = xpath.select('string(username)', node);
+  const role = xpath.select('string(role)', node);
+  req.session.user = { username: uname, role: role };
   res.redirect('/dashboard');
 });
 
