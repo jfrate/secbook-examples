@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Code examples for Applied Software Security",
   "scripts": {
-    "start": "node part3/chapter-3-1/base-project/app.js"
+    "start": "node part3/chapter-3-2/base-project/app.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
