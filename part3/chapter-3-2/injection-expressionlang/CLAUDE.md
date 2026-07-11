@@ -1,6 +1,6 @@
 # Chapter 3-1: Base Project
 
-Security book teaching target (`secbook-examples/part3/chapter-3-1`). A minimal Node.js/Express app used as the starting point for injection vulnerability examples.
+Security book teaching target (`secbook-examples/part3/chapter-3-2`). A minimal Node.js/Express app used as the starting point for injection vulnerability examples.
 
 ## Stack
 
